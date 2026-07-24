@@ -15,10 +15,51 @@ from src.vector_store import VectorStoreManager
 
 
 st.set_page_config(
-    page_title="RAG Document Indexing",
+    page_title="RAG Document Indexing & Search",
     page_icon="🔍",
     layout="wide",
+    initial_sidebar_state="expanded",
 )
+
+# Custom CSS for better accessibility and styling
+st.markdown("""
+    <style>
+    .main-header {
+        font-size: 2.5rem;
+        font-weight: bold;
+        margin-bottom: 0.5rem;
+    }
+    .section-header {
+        font-size: 1.5rem;
+        font-weight: bold;
+        margin-top: 1.5rem;
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid #1f77b4;
+    }
+    .info-box {
+        background-color: #e3f2fd;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        border-left: 4px solid #1976d2;
+        margin-bottom: 1rem;
+    }
+    .success-box {
+        background-color: #e8f5e9;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        border-left: 4px solid #388e3c;
+        margin-bottom: 1rem;
+    }
+    .warning-box {
+        background-color: #fff3e0;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        border-left: 4px solid #f57c00;
+        margin-bottom: 1rem;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
 
 @st.cache_resource(show_spinner=False)
@@ -106,10 +147,17 @@ def index_pdf_paths(pdf_paths: list[Path]) -> list[dict[str, str | int]]:
 
 
 def render_top_banner() -> None:
-    st.title("🔍 RAG Document Indexing")
-    st.caption(
-        "Fast Streamlit frontend for PDF indexing, semantic search, and Q&A over your ChromaDB collection."
-    )
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.markdown('<div class="main-header">🔍 Document Intelligence Hub</div>', unsafe_allow_html=True)
+        st.caption("Intelligent RAG system for fast document indexing, semantic search, and AI-powered Q&A")
+    with col2:
+        try:
+            metrics = get_vector_store().get_stats()
+            st.metric("📚 Documents Indexed", metrics.get("num_files", 0), help="Total unique PDF files in database")
+            st.metric("📄 Total Chunks", metrics.get("total_chunks", 0), help="Total text chunks indexed")
+        except:
+            pass
 
 
 def render_metrics(metrics: dict[str, object]) -> None:
@@ -126,102 +174,209 @@ def render_metrics(metrics: dict[str, object]) -> None:
 
 def render_dashboard() -> None:
     render_top_banner()
-    st.info("Use the sidebar to switch between indexing, search, Q&A, and database tools.")
-
+    
+    st.markdown('<div class="section-header">📊 Database Overview</div>', unsafe_allow_html=True)
+    
     try:
         metrics = get_vector_store().get_stats()
     except Exception as exc:
-        st.error(f"Could not load database stats: {exc}")
+        st.error(f"❌ Could not load database stats: {exc}")
         return
 
-    render_metrics(metrics)
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("📄 Total Indexed Chunks", metrics.get("total_chunks", 0), help="Semantic chunks stored in database")
+    with col2:
+        st.metric("📁 Unique Files", metrics.get("num_files", 0), help="Number of PDF documents indexed")
+    with col3:
+        st.metric("✅ Ready to Search", "Yes" if metrics.get("total_chunks", 0) > 0 else "No", help="Database status")
+
+    if metrics.get("indexed_files"):
+        with st.expander("📋 View Indexed Files", expanded=False):
+            files_list = "\n".join([f"• {name}" for name in sorted(metrics.get("indexed_files", []))])
+            st.markdown(files_list)
+    else:
+        st.info("💡 No documents indexed yet. Go to **Index PDFs** to get started!")
+    
+    st.divider()
+    st.markdown('<div class="section-header">🚀 Getting Started</div>', unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        with st.container(border=True):
+            st.markdown("### 1️⃣ Index PDFs")
+            st.caption("Upload or index local PDF files")
+            if st.button("Go to Indexing", key="quick_index", use_container_width=True):
+                st.switch_page("pages/1_index_pdfs.py")
+    
+    with col2:
+        with st.container(border=True):
+            st.markdown("### 2️⃣ Search Documents")
+            st.caption("Find relevant content instantly")
+            if st.button("Go to Search", key="quick_search", use_container_width=True):
+                st.switch_page("pages/2_search.py")
+    
+    with col3:
+        with st.container(border=True):
+            st.markdown("### 3️⃣ Ask Questions")
+            st.caption("Get AI-powered answers")
+            if st.button("Go to Q&A", key="quick_qa", use_container_width=True):
+                st.switch_page("pages/3_ask_question.py")
 
 
 def render_index_page() -> None:
     render_top_banner()
-    st.subheader("Index PDFs")
+    st.markdown('<div class="section-header">📁 Index PDF Documents</div>', unsafe_allow_html=True)
+    
+    st.markdown("""
+    <div class="info-box">
+    <strong>📌 How to use:</strong> Upload PDFs or link to a local folder. Your documents will be extracted, 
+    split into semantic chunks, embedded, and stored in the database for instant searching.
+    </div>
+    """, unsafe_allow_html=True)
 
+    st.markdown("#### Option 1: Upload PDF Files")
     uploaded_files = st.file_uploader(
-        "Upload one or more PDF files",
+        "Select one or more PDFs to upload",
         type=["pdf"],
         accept_multiple_files=True,
+        help="Supported formats: PDF. Max size per file depends on your system."
     )
 
+    st.markdown("#### Option 2: Index Local Files")
     local_path_text = st.text_input(
-        "Or index a local file/folder path",
-        placeholder=r"D:\\DocumentIndexing\\data\\semantic_search_guide.pdf",
+        "Or enter a local path to a PDF file or folder",
+        placeholder="Example: D:\\data\\documents.pdf or D:\\data\\",
+        help="Provide an absolute path to a PDF file or folder containing PDFs"
     )
 
-    col1, col2 = st.columns(2)
-    generate_sample = col1.button("Generate sample PDF")
-    index_uploaded = col2.button("Index uploaded/local PDFs")
+    st.markdown("#### Option 3: Generate Sample PDF")
+    st.caption("Create a sample PDF to test the system")
 
-    if generate_sample:
-        try:
-            output_path = PDFGenerator.generate_sample_pdf(Config.DATA_DIR / "semantic_search_guide.pdf")
-            st.success(f"Sample PDF created at {output_path}")
-        except Exception as exc:
-            st.error(f"Could not generate sample PDF: {exc}")
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if st.button("📄 Generate Sample PDF", help="Creates a sample PDF with demo content", use_container_width=True):
+            try:
+                with st.spinner("✨ Creating sample PDF..."):
+                    output_path = PDFGenerator.generate_sample_pdf(Config.DATA_DIR / "semantic_search_guide.pdf")
+                    st.success(f"✅ Sample PDF created successfully!")
+                    st.info(f"📍 Location: {output_path}")
+            except Exception as exc:
+                st.error(f"❌ Could not generate sample PDF: {exc}")
 
-    if index_uploaded:
+    with col2:
+        index_uploaded = st.button("🚀 Index Uploaded PDFs", help="Index the uploaded files", use_container_width=True)
+
+    with col3:
+        index_local = st.button("📂 Index Local Files", help="Index files from the path above", use_container_width=True)
+
+    if index_uploaded or index_local:
         paths: list[Path] = []
-        if uploaded_files:
-            with tempfile.TemporaryDirectory() as temp_dir:
-                temp_paths = save_uploaded_pdfs(uploaded_files)
-                paths.extend(temp_paths)
-                try:
-                    with st.spinner("Indexing uploaded PDFs..."):
-                        summaries = index_pdf_paths(paths)
-                    st.success("Indexing complete.")
-                    if summaries:
-                        st.dataframe(summaries, use_container_width=True, hide_index=True)
-                finally:
-                    for temp_path in temp_paths:
-                        if temp_path.exists():
-                            temp_path.unlink(missing_ok=True)
-        elif local_path_text.strip():
+        
+        if index_uploaded and uploaded_files:
+            with st.spinner("📤 Processing uploaded files..."):
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    temp_paths = save_uploaded_pdfs(uploaded_files)
+                    paths.extend(temp_paths)
+                    try:
+                        with st.spinner("⚙️ Indexing PDFs..."):
+                            summaries = index_pdf_paths(paths)
+                        st.success("✅ Indexing complete!")
+                        if summaries:
+                            st.dataframe(
+                                summaries,
+                                use_container_width=True,
+                                hide_index=True,
+                                column_config={
+                                    "file": st.column_config.TextColumn("📄 File Name"),
+                                    "pages": st.column_config.NumberColumn("📑 Pages"),
+                                    "chunks": st.column_config.NumberColumn("✂️ Chunks"),
+                                    "added": st.column_config.NumberColumn("✨ Added"),
+                                    "status": st.column_config.TextColumn("Status"),
+                                }
+                            )
+                    except PDFProcessingError as exc:
+                        st.error(f"❌ PDF processing error: {exc}")
+                    except Exception as exc:
+                        st.error(f"❌ Indexing failed: {exc}")
+                    finally:
+                        for temp_path in temp_paths:
+                            if temp_path.exists():
+                                temp_path.unlink(missing_ok=True)
+        
+        elif index_local and local_path_text.strip():
             paths = collect_pdf_paths(local_path_text)
             if not paths:
-                st.error("No PDF files found at the provided path.")
+                st.error("❌ No PDF files found at the provided path. Please check the path and try again.")
                 return
 
             try:
-                with st.spinner("Indexing local PDFs..."):
+                with st.spinner("⚙️ Indexing local PDFs..."):
                     summaries = index_pdf_paths(paths)
-                st.success("Indexing complete.")
+                st.success(f"✅ Indexing complete! ({len(summaries)} files processed)")
                 if summaries:
-                    st.dataframe(summaries, use_container_width=True, hide_index=True)
+                    st.dataframe(
+                        summaries,
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+                            "file": st.column_config.TextColumn("📄 File Name"),
+                            "pages": st.column_config.NumberColumn("📑 Pages"),
+                            "chunks": st.column_config.NumberColumn("✂️ Chunks"),
+                            "added": st.column_config.NumberColumn("✨ Added"),
+                            "status": st.column_config.TextColumn("Status"),
+                        }
+                    )
             except PDFProcessingError as exc:
-                st.error(f"PDF processing failed: {exc}")
+                st.error(f"❌ PDF processing failed: {exc}")
             except Exception as exc:
-                st.error(f"Indexing failed: {exc}")
+                st.error(f"❌ Indexing failed: {exc}")
         else:
-            st.warning("Upload PDFs or provide a local path first.")
+            st.warning("⚠️ Please upload PDFs or provide a local path first.")
 
 
 def render_search_page() -> None:
     render_top_banner()
-    st.subheader("Semantic Search")
+    st.markdown('<div class="section-header">🔎 Semantic Search</div>', unsafe_allow_html=True)
+    
+    st.markdown("""
+    <div class="info-box">
+    <strong>💡 How it works:</strong> Enter natural language queries to find relevant documents. 
+    Results are ranked by relevance score (lower = more relevant).
+    </div>
+    """, unsafe_allow_html=True)
 
-    query = st.text_input("Search query", placeholder="Explain cosine similarity")
-    top_k = st.slider("Top K results", min_value=1, max_value=10, value=3)
+    query = st.text_input(
+        "Enter your search query",
+        placeholder="Example: What is cosine similarity? How does semantic search work?",
+        help="Ask any question about your documents. Natural language is supported."
+    )
+    
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        top_k = st.slider("Number of results to return", min_value=1, max_value=10, value=3, help="More results take longer to display")
+    with col2:
+        search_button = st.button("🔍 Search", help="Click to search", use_container_width=True)
 
-    if st.button("Run search"):
+    if search_button:
         if not query.strip():
-            st.warning("Enter a search query first.")
+            st.warning("⚠️ Please enter a search query first.")
             return
 
         try:
-            with st.spinner("Searching indexed chunks..."):
+            with st.spinner("🔄 Searching indexed documents..."):
                 results = get_vector_store().similarity_search(query, k=top_k)
         except Exception as exc:
-            st.error(f"Search failed: {exc}")
+            st.error(f"❌ Search failed: {exc}")
             return
 
         if not results:
-            st.warning("No matches found.")
+            st.info("💭 No matches found. Try a different query or index more documents.")
             return
 
+        st.success(f"✅ Found {len(results)} matching results")
+        
         rows = []
         for idx, (doc, score) in enumerate(results, start=1):
             snippet = doc.page_content.replace("\n", " ")
@@ -237,95 +392,219 @@ def render_search_page() -> None:
                 }
             )
 
-        st.dataframe(rows, use_container_width=True, hide_index=True)
+        st.dataframe(
+            rows,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Rank": st.column_config.NumberColumn("Rank", width="small"),
+                "Score": st.column_config.NumberColumn("Score", help="Lower is better", width="small"),
+                "Document": st.column_config.TextColumn("Document"),
+                "Page": st.column_config.NumberColumn("Page", width="small"),
+                "Snippet": st.column_config.TextColumn("Preview"),
+            }
+        )
+        
+        with st.expander("📖 View Full Text", expanded=False):
+            selected_idx = st.selectbox("Select a result to view full text", range(len(results)), format_func=lambda i: f"{i+1}. {rows[i]['Document']} (Page {rows[i]['Page']})")
+            if selected_idx is not None:
+                full_text = results[selected_idx][0].page_content
+                st.markdown(f"**Document:** {results[selected_idx][0].metadata.get('document_name')}")
+                st.markdown(f"**Page:** {results[selected_idx][0].metadata.get('page_number')}")
+                st.markdown("---")
+                st.write(full_text)
 
 
 def render_query_page() -> None:
     render_top_banner()
-    st.subheader("Ask a Question")
+    st.markdown('<div class="section-header">🤖 Ask a Question (AI-Powered Q&A)</div>', unsafe_allow_html=True)
+    
+    st.markdown("""
+    <div class="info-box">
+    <strong>✨ How it works:</strong> Ask any question about your documents. The AI finds relevant sections 
+    and generates a comprehensive answer with source references.
+    </div>
+    """, unsafe_allow_html=True)
 
     question = st.text_area(
-        "Question",
-        placeholder="What is the recommended chunk overlap in this codebase?",
+        "Enter your question",
+        placeholder="Example: What is the recommended chunk overlap in this codebase? How does the RAG pipeline work?",
         height=120,
+        help="Ask a question about your indexed documents"
     )
 
-    if st.button("Get answer"):
-        if not question.strip():
-            st.warning("Enter a question first.")
-            return
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        pass
+    with col2:
+        if st.button("🚀 Get Answer", help="Generate AI-powered answer", use_container_width=True):
+            if not question.strip():
+                st.warning("⚠️ Please enter a question first.")
+                return
 
-        try:
-            with st.spinner("Generating answer..."):
-                rag_service = get_rag_service()
-                result = rag_service.query(question)
-        except RAGQAError as exc:
-            st.error(str(exc))
-            return
-        except Exception as exc:
-            st.error(f"Q&A failed: {exc}")
-            return
+            try:
+                with st.spinner("🤔 Analyzing question and searching documents..."):
+                    rag_service = get_rag_service()
+                    result = rag_service.query(question)
+            except RAGQAError as exc:
+                st.error(f"❌ RAG service error: {str(exc)}")
+                return
+            except Exception as exc:
+                st.error(f"❌ Q&A failed: {exc}")
+                return
 
-        st.success("Answer generated.")
-        st.markdown("### Answer")
-        st.write(result["answer"])
+            st.success("✅ Answer generated!")
+            
+            # Display answer in an attractive container
+            st.markdown('<div class="section-header">💡 Answer</div>', unsafe_allow_html=True)
+            with st.container(border=True):
+                st.markdown(result["answer"])
 
-        source_docs = result.get("source_documents", [])
-        if source_docs:
-            st.markdown("### Source Chunks")
-            seen = set()
-            for doc in source_docs:
-                doc_name = doc.metadata.get("document_name", "N/A")
-                page_num = doc.metadata.get("page_number", "N/A")
-                ref_key = f"{doc_name}_p{page_num}"
-                if ref_key in seen:
-                    continue
-                seen.add(ref_key)
-                preview = doc.page_content.replace("\n", " ")
-                if len(preview) > 220:
-                    preview = preview[:217] + "..."
-                with st.expander(f"{doc_name} — page {page_num}"):
-                    st.write(preview)
-        else:
-            st.info("No source documents were returned.")
+            # Display sources
+            source_docs = result.get("source_documents", [])
+            if source_docs:
+                st.markdown('<div class="section-header">📚 Source References</div>', unsafe_allow_html=True)
+                st.caption(f"Answer is based on {len(source_docs)} source document(s)")
+                
+                seen = set()
+                for idx, doc in enumerate(source_docs, 1):
+                    doc_name = doc.metadata.get("document_name", "N/A")
+                    page_num = doc.metadata.get("page_number", "N/A")
+                    ref_key = f"{doc_name}_p{page_num}"
+                    if ref_key in seen:
+                        continue
+                    seen.add(ref_key)
+                    
+                    preview = doc.page_content.replace("\n", " ")
+                    if len(preview) > 220:
+                        preview = preview[:217] + "..."
+                    
+                    with st.expander(f"📄 {doc_name} — Page {page_num}", expanded=(idx==1)):
+                        st.caption("**Relevant Excerpt:**")
+                        st.markdown(f"_{preview}_")
+            else:
+                st.info("💭 No source documents were returned for this query.")
 
 
 def render_stats_page() -> None:
     render_top_banner()
-    st.subheader("Database Stats")
+    st.markdown('<div class="section-header">⚙️ Database Management & Settings</div>', unsafe_allow_html=True)
 
     col1, col2 = st.columns(2)
-    if col1.button("Refresh stats"):
-        st.cache_resource.clear()
+    
+    with col1:
+        if st.button("🔄 Refresh Statistics", help="Reload database statistics", use_container_width=True):
+            st.cache_resource.clear()
+            st.rerun()
+    
+    with col2:
+        if st.button("🗑️ Clear Database", help="WARNING: This will delete all indexed data", use_container_width=True):
+            st.session_state.show_delete_confirm = True
+    
+    if st.session_state.get("show_delete_confirm", False):
+        st.warning("⚠️ **Are you sure?** This will delete all indexed documents and cannot be undone.")
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if st.button("Yes, Delete All", key="confirm_delete", use_container_width=True):
+                try:
+                    with st.spinner("🗑️ Clearing database..."):
+                        get_vector_store().clear_database()
+                    st.success("✅ Vector database cleared successfully.")
+                    st.session_state.show_delete_confirm = False
+                    st.cache_resource.clear()
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"❌ Reset failed: {exc}")
+        
+        with col2:
+            if st.button("Cancel", key="cancel_delete", use_container_width=True):
+                st.session_state.show_delete_confirm = False
+                st.rerun()
+    
+    st.divider()
+    st.markdown('<div class="section-header">📊 Current Database Status</div>', unsafe_allow_html=True)
 
     try:
         metrics = get_vector_store().get_stats()
-        render_metrics(metrics)
-    except Exception as exc:
-        st.error(f"Could not load stats: {exc}")
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("📚 Total Documents", metrics.get("num_files", 0), help="Number of unique PDF files indexed")
+        with col2:
+            st.metric("📄 Total Chunks", metrics.get("total_chunks", 0), help="Total semantic chunks in database")
+        with col3:
+            status = "✅ Active" if metrics.get("total_chunks", 0) > 0 else "⏳ Empty"
+            st.metric("Status", status)
 
-    if col2.button("Reset database"):
-        try:
-            get_vector_store().clear_database()
-            st.success("Vector database cleared.")
-        except Exception as exc:
-            st.error(f"Reset failed: {exc}")
+        indexed_files = metrics.get("indexed_files", []) or []
+        if indexed_files:
+            st.markdown("#### 📋 Indexed Documents")
+            for i, file in enumerate(sorted(indexed_files), 1):
+                st.caption(f"{i}. {file}")
+        else:
+            st.info("💭 No documents indexed yet.")
+            
+    except Exception as exc:
+        st.error(f"❌ Could not load statistics: {exc}")
 
 
 def render_sidebar() -> str:
-    st.sidebar.header("Navigation")
-    page = st.sidebar.radio(
-        "Go to",
-        ["Dashboard", "Index PDFs", "Search", "Ask a Question", "Stats & Reset"],
-    )
+    with st.sidebar:
+        st.markdown("## 🗂️ Navigation")
+        
+        page = st.radio(
+            "Select a section:",
+            ["Dashboard", "Index PDFs", "Search", "Ask a Question", "Settings"],
+            help="Choose what you'd like to do"
+        )
 
-    st.sidebar.divider()
-    st.sidebar.write("Run the app with:")
-    st.sidebar.code("streamlit run streamlit_app.py")
+        st.divider()
+        
+        st.markdown("### 📚 Quick Info")
+        try:
+            stats = get_vector_store().get_stats()
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Files", stats.get("num_files", 0))
+            with col2:
+                st.metric("Chunks", stats.get("total_chunks", 0))
+        except:
+            pass
+        
+        st.divider()
+        
+        st.markdown("### ℹ️ Help & Resources")
+        with st.expander("💡 Tips & Tricks"):
+            st.markdown("""
+            **Indexing:**
+            - Upload multiple PDFs at once
+            - Use local folder paths for batch indexing
+            
+            **Searching:**
+            - Use natural language queries
+            - Lower score = higher relevance
+            
+            **Q&A:**
+            - Ask specific questions
+            - Answers show source references
+            """)
+        
+        with st.expander("⚙️ How to Run"):
+            st.code("streamlit run streamlit_app.py", language="bash")
+        
+        st.divider()
+        st.caption("🔍 Document Intelligence Hub v1.0")
+        st.caption("Powered by LangChain, ChromaDB, and OpenAI")
+    
     return page
 
 
 def main() -> None:
+    # Initialize session state for UI state management
+    if "show_delete_confirm" not in st.session_state:
+        st.session_state.show_delete_confirm = False
+    
     page = render_sidebar()
 
     if page == "Dashboard":
@@ -336,7 +615,7 @@ def main() -> None:
         render_search_page()
     elif page == "Ask a Question":
         render_query_page()
-    elif page == "Stats & Reset":
+    elif page == "Settings":
         render_stats_page()
 
 
